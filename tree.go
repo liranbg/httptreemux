@@ -2,6 +2,7 @@ package httptreemux
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -44,10 +45,6 @@ func (n *node) sortStaticChild(i int) {
 func (n *node) setHandler(verb string, handler HandlerFunc, implicitHead bool) {
 	if n.leafHandler == nil {
 		n.leafHandler = make(map[string]HandlerFunc)
-	}
-	_, ok := n.leafHandler[verb]
-	if ok && (verb != "HEAD" || !n.implicitHead) {
-		panic(fmt.Sprintf("%s already handles %s", n.path, verb))
 	}
 	n.leafHandler[verb] = handler
 
@@ -266,9 +263,9 @@ func (n *node) search(method, path string) (found *node, handler HandlerFunc, pa
 
 	if n.wildcardChild != nil {
 		// Didn't find a static token, so check for a wildcard.
-		nextSlash := strings.IndexByte(path, '/')
-		if nextSlash < 0 {
-			nextSlash = pathLen
+		nextSlash := 0
+		for nextSlash < pathLen && path[nextSlash] != '/' {
+			nextSlash++
 		}
 
 		thisToken := path[0:nextSlash]
@@ -277,7 +274,7 @@ func (n *node) search(method, path string) (found *node, handler HandlerFunc, pa
 		if len(thisToken) > 0 { // Don't match on empty tokens.
 			wcNode, wcHandler, wcParams := n.wildcardChild.search(method, nextToken)
 			if wcHandler != nil || (found == nil && wcNode != nil) {
-				unescaped, err := unescape(thisToken)
+				unescaped, err := url.QueryUnescape(thisToken)
 				if err != nil {
 					unescaped = thisToken
 				}
@@ -310,7 +307,7 @@ func (n *node) search(method, path string) (found *node, handler HandlerFunc, pa
 		// Found a handler, or we found a catchall node without a handler.
 		// Either way, return it since there's nothing left to check after this.
 		if handler != nil || found == nil {
-			unescaped, err := unescape(path)
+			unescaped, err := url.QueryUnescape(path)
 			if err != nil {
 				unescaped = path
 			}
